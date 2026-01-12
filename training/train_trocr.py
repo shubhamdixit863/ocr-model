@@ -53,7 +53,8 @@ def preprocess_dataset(dataset: Dataset, processor: TrOCRProcessor, max_target_l
         labels = [label if label != processor.tokenizer.pad_token_id else -100 for label in labels]
         return {"pixel_values": pixel, "labels": labels}
 
-    return dataset.map(_map, remove_columns=["image", "text"])
+    mapped = dataset.map(_map, remove_columns=["image", "text"])
+    return mapped.with_format("torch")
 
 
 def build_compute_metrics(processor: TrOCRProcessor):
@@ -130,29 +131,39 @@ def main() -> None:
     eval_ds = preprocess_dataset(split["test"], processor, config.max_target_length)
 
     def _collate(features: List[Dict[str, Any]]) -> Dict[str, Any]:
-        pixel_values = torch.stack([f["pixel_values"] for f in features])
-        labels = torch.tensor([f["labels"] for f in features], dtype=torch.long)
+        pixel_values = torch.stack([torch.as_tensor(f["pixel_values"]) for f in features])
+        labels = torch.stack([torch.as_tensor(f["labels"], dtype=torch.long) for f in features])
         return {"pixel_values": pixel_values, "labels": labels}
 
-    training_args = Seq2SeqTrainingArguments(
-        output_dir=config.output_dir,
-        per_device_train_batch_size=config.per_device_batch_size,
-        per_device_eval_batch_size=config.per_device_batch_size,
-        num_train_epochs=config.num_train_epochs,
-        learning_rate=config.learning_rate,
-        fp16=config.fp16,
-        evaluation_strategy="steps",
-        eval_steps=200,
-        save_steps=200,
-        save_total_limit=2,
-        predict_with_generate=True,
-        logging_steps=50,
-        seed=config.seed,
-        load_best_model_at_end=True,
-        metric_for_best_model="cer",
-        greater_is_better=False,
-        report_to=[],
-    )
+    training_args_kwargs = {
+        "output_dir": config.output_dir,
+        "per_device_train_batch_size": config.per_device_batch_size,
+        "per_device_eval_batch_size": config.per_device_batch_size,
+        "num_train_epochs": config.num_train_epochs,
+        "learning_rate": config.learning_rate,
+        "fp16": config.fp16,
+        "evaluation_strategy": "steps",
+        "eval_steps": 200,
+        "save_steps": 200,
+        "save_total_limit": 2,
+        "predict_with_generate": True,
+        "logging_steps": 50,
+        "seed": config.seed,
+        "load_best_model_at_end": True,
+        "metric_for_best_model": "cer",
+        "greater_is_better": False,
+        "report_to": [],
+    }
+    try:
+        training_args = Seq2SeqTrainingArguments(**training_args_kwargs)
+    except TypeError:
+        # Older transformers uses do_eval instead of evaluation_strategy.
+        training_args_kwargs.pop("evaluation_strategy", None)
+        training_args_kwargs["do_eval"] = True
+        training_args_kwargs["load_best_model_at_end"] = False
+        training_args_kwargs.pop("metric_for_best_model", None)
+        training_args_kwargs.pop("greater_is_better", None)
+        training_args = Seq2SeqTrainingArguments(**training_args_kwargs)
 
     trainer = Seq2SeqTrainer(
         model=model,

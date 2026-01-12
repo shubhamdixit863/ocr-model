@@ -26,7 +26,7 @@ python data/synthetic_generator.py \
 ## Training
 
 ```bash
-python training/train_trocr.py \
+python -m training.train_trocr \
   --images-dir data/raw_images \
   --labels-dir data/labels \
   --output-dir models/kaithi-trocr \
@@ -38,10 +38,25 @@ python training/train_trocr.py \
 ## Evaluation
 
 ```bash
-python training/evaluate.py \
+python -m training.eval_model \
   --model-dir models/kaithi-trocr \
   --images-dir data/raw_images \
   --labels-dir data/labels
+```
+
+## Upload Model to S3
+
+Set credentials via env and upload the trained model directory:
+
+```bash
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_DEFAULT_REGION=us-east-1
+
+python scripts/push_model_to_s3.py \
+  --model-dir models/kaithi-trocr \
+  --bucket your-bucket \
+  --prefix kaithi/models/kaithi-trocr
 ```
 
 ## Inference API
@@ -75,7 +90,7 @@ You can set `KAITHI_DATA_DIR` to change the base data directory.
 Use the feedback data along with the base dataset:
 
 ```bash
-python training/retrain.py \
+python -m training.retrain \
   --images-dir data/raw_images \
   --labels-dir data/labels \
   --images-dir data/feedback_images \
@@ -89,7 +104,7 @@ python training/retrain.py \
 - `data/synthetic_generator.py`: render Kaithi text images with augmentations
 - `training/dataset.py`: dataset loader returning `{"image": PIL.Image, "text": str}`
 - `training/train_trocr.py`: fine-tune TrOCR with Kaithi vocabulary
-- `training/evaluate.py`: CER evaluation and sample predictions
+- `training/eval_model.py`: CER evaluation and sample predictions
 - `inference/`: preprocessing, OCR inference, postprocessing
 - `api/main.py`: FastAPI endpoint
 - `models/kaithi-trocr/`: model output directory
