@@ -3,3 +3,4 @@ data/raw_images/
 data/labels/
 data/feedback_images/
 data/feedback_labels/
+.venv/
