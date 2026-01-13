@@ -50,7 +50,13 @@ def _release_train_lock() -> None:
     try:
         TRAIN_LOCK.unlink()
     except FileNotFoundError:
-        return
+    return
+
+
+def _count_feedback_samples() -> int:
+    if not FEEDBACK_LINE_LABELS_DIR.exists():
+        return 0
+    return len(list(FEEDBACK_LINE_LABELS_DIR.glob("*.txt")))
 
 
 def _start_retrain() -> None:
@@ -69,6 +75,10 @@ def _start_retrain() -> None:
     if line_images.exists() and line_labels.exists():
         cmd += ["--images-dir", str(line_images), "--labels-dir", str(line_labels)]
     cmd += ["--images-dir", str(FEEDBACK_IMAGES_DIR), "--labels-dir", str(FEEDBACK_LABELS_DIR)]
+    if os.getenv("KAITHI_RETRAIN_SMALL_DATA_BOOST", "1").lower() in {"1", "true", "yes"}:
+        feedback_count = _count_feedback_samples()
+        if feedback_count > 0 and feedback_count < 20:
+            epochs = str(max(int(epochs), 50))
     cmd += ["--output-dir", model_dir, "--epochs", epochs, "--batch-size", batch_size]
     if fp16:
         cmd.append("--fp16")

@@ -122,6 +122,7 @@ Retrain behavior can be tuned via env vars:
 - `KAITHI_RETRAIN_EPOCHS`
 - `KAITHI_RETRAIN_BATCH_SIZE`
 - `KAITHI_RETRAIN_FP16` (`1` to enable)
+- `KAITHI_RETRAIN_SMALL_DATA_BOOST` (`1` by default to boost epochs for <20 feedback samples)
 
 ## Periodic Retraining (Optional)
 
