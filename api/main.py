@@ -50,7 +50,7 @@ def _release_train_lock() -> None:
     try:
         TRAIN_LOCK.unlink()
     except FileNotFoundError:
-    return
+        pass
 
 
 def _count_feedback_samples() -> int:
