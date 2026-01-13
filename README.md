@@ -84,6 +84,8 @@ curl -X POST "http://localhost:8000/ocr" \
   -F "file=@/path/to/kaithi_sample.png"
 ```
 
+Multi-line images are automatically segmented into lines before OCR.
+
 OCR with correction hint (entropy-based):
 
 ```bash
@@ -101,7 +103,9 @@ curl -X POST "http://localhost:8000/feedback" \
   -F "text=𑂍𑂰𑂠𑂲"
 ```
 
-This stores data under `data/feedback_images/` and `data/feedback_labels/` by default.
+This stores data under `data/feedback_images/` and `data/feedback_labels/` by default,
+and also saves line-level crops under `data/feedback_line_images/` and
+`data/feedback_line_labels/`.
 You can set `KAITHI_DATA_DIR` to change the base data directory.
 
 When feedback is submitted, the API triggers a background retrain if one is not
@@ -113,6 +117,7 @@ already running:
 Retrain behavior can be tuned via env vars:
 
 - `KAITHI_BASE_IMAGES_DIR` / `KAITHI_BASE_LABELS_DIR`
+- `KAITHI_LINE_IMAGES_DIR` / `KAITHI_LINE_LABELS_DIR`
 - `KAITHI_MODEL_DIR`
 - `KAITHI_RETRAIN_EPOCHS`
 - `KAITHI_RETRAIN_BATCH_SIZE`

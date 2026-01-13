@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from inference.ocr import KaithiOCR
+from inference.preprocess import preprocess_lines
 
 LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +30,8 @@ ocr_model: KaithiOCR | None = None
 DATA_DIR = Path(os.getenv("KAITHI_DATA_DIR", "data"))
 FEEDBACK_IMAGES_DIR = DATA_DIR / "feedback_images"
 FEEDBACK_LABELS_DIR = DATA_DIR / "feedback_labels"
+FEEDBACK_LINE_IMAGES_DIR = DATA_DIR / "feedback_line_images"
+FEEDBACK_LINE_LABELS_DIR = DATA_DIR / "feedback_line_labels"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TRAIN_LOCK = DATA_DIR / "training.lock"
 
@@ -53,6 +56,8 @@ def _release_train_lock() -> None:
 def _start_retrain() -> None:
     base_images = Path(os.getenv("KAITHI_BASE_IMAGES_DIR", DATA_DIR / "raw_images"))
     base_labels = Path(os.getenv("KAITHI_BASE_LABELS_DIR", DATA_DIR / "labels"))
+    line_images = Path(os.getenv("KAITHI_LINE_IMAGES_DIR", FEEDBACK_LINE_IMAGES_DIR))
+    line_labels = Path(os.getenv("KAITHI_LINE_LABELS_DIR", FEEDBACK_LINE_LABELS_DIR))
     model_dir = os.getenv("KAITHI_MODEL_DIR", "models/kaithi_trocr")
     epochs = os.getenv("KAITHI_RETRAIN_EPOCHS", "1")
     batch_size = os.getenv("KAITHI_RETRAIN_BATCH_SIZE", "4")
@@ -61,6 +66,8 @@ def _start_retrain() -> None:
     cmd = [sys.executable, "-m", "training.retrain"]
     if base_images.exists() and base_labels.exists():
         cmd += ["--images-dir", str(base_images), "--labels-dir", str(base_labels)]
+    if line_images.exists() and line_labels.exists():
+        cmd += ["--images-dir", str(line_images), "--labels-dir", str(line_labels)]
     cmd += ["--images-dir", str(FEEDBACK_IMAGES_DIR), "--labels-dir", str(FEEDBACK_LABELS_DIR)]
     cmd += ["--output-dir", model_dir, "--epochs", epochs, "--batch-size", batch_size]
     if fp16:
@@ -85,6 +92,8 @@ def load_model() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     FEEDBACK_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     FEEDBACK_LABELS_DIR.mkdir(parents=True, exist_ok=True)
+    FEEDBACK_LINE_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    FEEDBACK_LINE_LABELS_DIR.mkdir(parents=True, exist_ok=True)
     ocr_model = KaithiOCR(model_dir="models/kaithi_trocr")
 
 
@@ -145,6 +154,7 @@ async def feedback_endpoint(
         if predicted_text is not None:
             meta["predicted_text"] = predicted_text
         meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        _save_line_feedback(sample_id, image_bytes, text)
         if _acquire_train_lock():
             _start_retrain()
             return JSONResponse(
@@ -154,3 +164,16 @@ async def feedback_endpoint(
     except Exception as exc:
         LOGGER.exception("Feedback save failed")
         return JSONResponse(status_code=400, content={"error": str(exc)})
+
+
+def _save_line_feedback(sample_id: str, image_bytes: bytes, text: str) -> None:
+    """Split image into lines and save line-level crops/labels."""
+    lines = preprocess_lines(image_bytes)
+    text_lines = [line.strip() for line in text.splitlines() if line.strip()]
+    line_count = min(len(lines), len(text_lines))
+    for idx in range(line_count):
+        line_id = f"{sample_id}_l{idx:02d}"
+        image_path = FEEDBACK_LINE_IMAGES_DIR / f"{line_id}.png"
+        label_path = FEEDBACK_LINE_LABELS_DIR / f"{line_id}.txt"
+        lines[idx].save(image_path)
+        label_path.write_text(text_lines[idx], encoding="utf-8")

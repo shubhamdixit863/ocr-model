@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
 from inference.postprocess import postprocess_text
-from inference.preprocess import preprocess_image
+from inference.preprocess import preprocess_lines
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,32 +28,35 @@ class KaithiOCR:
             return 0.0
         entropies = []
         for step_scores in scores:
-            probs = F.softmax(step_scores[0], dim=-1)
-            entropy = -(probs * probs.log()).sum().item()
+            probs = F.softmax(step_scores, dim=-1)
+            entropy = -(probs * probs.log()).sum(dim=-1)
             entropies.append(entropy)
-        return sum(entropies) / len(entropies)
+        per_batch = torch.stack(entropies, dim=0).mean(dim=0)
+        return per_batch.mean().item()
 
     def predict(self, image_bytes: bytes) -> str:
         """Run preprocessing, inference, and postprocessing."""
-        image = preprocess_image(image_bytes)
-        pixel_values = self.processor(images=image, return_tensors="pt").pixel_values
+        images = preprocess_lines(image_bytes)
+        pixel_values = self.processor(images=images, return_tensors="pt").pixel_values
         pixel_values = pixel_values.to(self.device)
         with torch.no_grad():
             generated = self.model.generate(pixel_values)
-        text = self.processor.batch_decode(generated, skip_special_tokens=True)[0]
-        return postprocess_text(text)
+        texts = self.processor.batch_decode(generated, skip_special_tokens=True)
+        cleaned = [postprocess_text(text) for text in texts]
+        return "\n".join([text for text in cleaned if text])
 
     def predict_with_entropy(self, image_bytes: bytes) -> tuple[str, float]:
         """Run OCR and return text plus average token entropy."""
-        image = preprocess_image(image_bytes)
-        pixel_values = self.processor(images=image, return_tensors="pt").pixel_values
+        images = preprocess_lines(image_bytes)
+        pixel_values = self.processor(images=images, return_tensors="pt").pixel_values
         pixel_values = pixel_values.to(self.device)
         with torch.no_grad():
             outputs = self.model.generate(
                 pixel_values, output_scores=True, return_dict_in_generate=True
             )
-        text = self.processor.batch_decode(
+        texts = self.processor.batch_decode(
             outputs.sequences, skip_special_tokens=True
-        )[0]
+        )
+        cleaned = [postprocess_text(text) for text in texts]
         entropy = self._entropy_score(outputs.scores)
-        return postprocess_text(text), entropy
+        return "\n".join([text for text in cleaned if text]), entropy
