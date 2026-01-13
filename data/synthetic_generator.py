@@ -1,7 +1,9 @@
 import argparse
+import json
 import logging
 import os
 import random
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Tuple
@@ -12,19 +14,60 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 
 KAITHI_START = 0x11080
 KAITHI_END = 0x110CF
+DEVANAGARI_START = 0x0900
+DEVANAGARI_END = 0x097F
+DEFAULT_MAPPING_PATH = Path(__file__).with_name("kaithi_to_devanagari.json")
 
 LOGGER = logging.getLogger(__name__)
 
 
-def kaithi_characters() -> List[str]:
-    """Return the Kaithi Unicode block as a list of characters."""
-    return [chr(code) for code in range(KAITHI_START, KAITHI_END + 1)]
+def _build_devanagari_name_map() -> dict[str, str]:
+    """Map Devanagari Unicode names (suffix) to characters."""
+    name_map: dict[str, str] = {}
+    for code in range(DEVANAGARI_START, DEVANAGARI_END + 1):
+        ch = chr(code)
+        name = unicodedata.name(ch, "")
+        if not name.startswith("DEVANAGARI "):
+            continue
+        name_map[name.replace("DEVANAGARI ", "", 1)] = ch
+    return name_map
 
 
-def random_kaithi_text(min_len: int, max_len: int, rng: random.Random) -> str:
+def _kaithi_to_devanagari_map() -> dict[str, str]:
+    """Build a Kaithi->Devanagari mapping using Unicode name matching."""
+    devanagari_by_name = _build_devanagari_name_map()
+    mapping: dict[str, str] = {}
+    for code in range(KAITHI_START, KAITHI_END + 1):
+        ch = chr(code)
+        name = unicodedata.name(ch, "")
+        if not name.startswith("KAITHI "):
+            continue
+        suffix = name.replace("KAITHI ", "", 1)
+        target = devanagari_by_name.get(suffix)
+        if target:
+            mapping[ch] = target
+    return mapping
+
+
+def _load_mapping(mapping_path: Path) -> dict[str, str]:
+    if mapping_path.exists():
+        with mapping_path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return {str(k): str(v) for k, v in data.items()}
+    return _kaithi_to_devanagari_map()
+
+
+def kaithi_characters(mapping: dict[str, str]) -> List[str]:
+    """Return Kaithi characters that have a Devanagari mapping."""
+    return sorted(mapping.keys())
+
+
+def random_kaithi_text(
+    min_len: int, max_len: int, rng: random.Random, mapping: dict[str, str]
+) -> str:
     """Sample a random Kaithi string with length in [min_len, max_len]."""
     length = rng.randint(min_len, max_len)
-    chars = kaithi_characters()
+    chars = kaithi_characters(mapping)
     return "".join(rng.choice(chars) for _ in range(length))
 
 
@@ -42,13 +85,16 @@ class RenderConfig:
 
 
 class SyntheticKaithiGenerator:
-    """Render Kaithi strings into images with light OCR-style augmentations."""
-    def __init__(self, font_path: Path, config: RenderConfig, seed: int) -> None:
+    """Render Kaithi strings into images with Hindi labels."""
+    def __init__(
+        self, font_path: Path, config: RenderConfig, seed: int, mapping_path: Path
+    ) -> None:
         self.font_path = font_path
         self.config = config
         self.rng = random.Random(seed)
         self.np_rng = np.random.default_rng(seed)
         self.font = ImageFont.truetype(str(font_path), config.font_size)
+        self.mapping = _load_mapping(mapping_path)
 
     def _render_text(self, text: str) -> Image.Image:
         """Render text centered in a grayscale image."""
@@ -84,21 +130,25 @@ class SyntheticKaithiGenerator:
         return Image.fromarray(img_np)
 
     def generate(self, output_images: Path, output_labels: Path, count: int) -> None:
-        """Generate image/label pairs into the given directories."""
+        """Generate Kaithi image + Hindi text label pairs."""
         output_images.mkdir(parents=True, exist_ok=True)
         output_labels.mkdir(parents=True, exist_ok=True)
         for idx in range(count):
-            text = random_kaithi_text(
-                self.config.min_text_len, self.config.max_text_len, self.rng
+            kaithi_text = random_kaithi_text(
+                self.config.min_text_len,
+                self.config.max_text_len,
+                self.rng,
+                self.mapping,
             )
-            image = self._render_text(text)
+            hindi_text = "".join(self.mapping.get(ch, "") for ch in kaithi_text)
+            image = self._render_text(kaithi_text)
             image = self._augment(image)
 
             filename = f"sample_{idx:06d}.png"
             image_path = output_images / filename
             label_path = output_labels / f"sample_{idx:06d}.txt"
             image.save(image_path)
-            label_path.write_text(text, encoding="utf-8")
+            label_path.write_text(hindi_text, encoding="utf-8")
 
             if idx % 100 == 0:
                 LOGGER.info("Generated %s", filename)
@@ -110,6 +160,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-images", type=str, default="data/raw_images")
     parser.add_argument("--output-labels", type=str, default="data/labels")
     parser.add_argument("--count", type=int, default=1000)
+    parser.add_argument("--mapping-path", type=str, default=str(DEFAULT_MAPPING_PATH))
     parser.add_argument("--width", type=int, default=384)
     parser.add_argument("--height", type=int, default=96)
     parser.add_argument("--font-size", type=int, default=48)
@@ -138,7 +189,9 @@ def main() -> None:
         blur_kernel=args.blur_kernel,
         contrast_range=(args.contrast_min, args.contrast_max),
     )
-    generator = SyntheticKaithiGenerator(Path(args.font_path), config, args.seed)
+    generator = SyntheticKaithiGenerator(
+        Path(args.font_path), config, args.seed, Path(args.mapping_path)
+    )
     generator.generate(
         Path(args.output_images),
         Path(args.output_labels),

@@ -32,11 +32,11 @@ class TrainConfig:
     seed: int
 
 
-def add_kaithi_tokens(processor: TrOCRProcessor) -> int:
-    """Add Kaithi Unicode block characters to the tokenizer."""
-    chars = [chr(code) for code in range(0x11080, 0x110D0)]
+def add_devanagari_tokens(processor: TrOCRProcessor) -> int:
+    """Add Devanagari Unicode block characters to the tokenizer."""
+    chars = [chr(code) for code in range(0x0900, 0x0980)]
     added = processor.tokenizer.add_tokens(chars)
-    LOGGER.info("Added %d Kaithi tokens", added)
+    LOGGER.info("Added %d Devanagari tokens", added)
     return added
 
 
@@ -87,8 +87,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train Kaithi TrOCR")
     parser.add_argument("--images-dir", type=str, default="data/raw_images")
     parser.add_argument("--labels-dir", type=str, default="data/labels")
-    parser.add_argument("--output-dir", type=str, default="models/kaithi-trocr")
-    parser.add_argument("--model-name", type=str, default="microsoft/trocr-base-handwritten")
+    parser.add_argument("--output-dir", type=str, default="models/kaithi_trocr")
+    parser.add_argument("--model-name", type=str, default="microsoft/trocr-base-printed")
     parser.add_argument("--max-target-length", type=int, default=64)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=5)
@@ -119,7 +119,7 @@ def main() -> None:
     split = dataset.train_test_split(test_size=args.eval_split, seed=config.seed)
 
     processor = TrOCRProcessor.from_pretrained(config.model_name)
-    add_kaithi_tokens(processor)
+    add_devanagari_tokens(processor)
 
     model = VisionEncoderDecoderModel.from_pretrained(config.model_name)
     model.decoder.resize_token_embeddings(len(processor.tokenizer))

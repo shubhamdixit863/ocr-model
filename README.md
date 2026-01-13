@@ -1,6 +1,6 @@
-# Kaithi TrOCR OCR
+# Kaithi to Hindi TrOCR OCR
 
-End-to-end OCR pipeline for printed Kaithi Lipi using a fine-tuned TrOCR model.
+End-to-end OCR pipeline for printed Kaithi Lipi using a fine-tuned TrOCR model that outputs Hindi (Devanagari) text.
 
 ## Setup
 
@@ -13,11 +13,23 @@ pip install -r requirements.txt
 
 3. Download the Noto Sans Kaithi font and note its path.
 
-## Synthetic Data Generation
+## Synthetic Data Generation (Kaithi image -> Hindi label)
 
 ```bash
 python data/synthetic_generator.py \
   --font-path /path/to/NotoSansKaithi-Regular.ttf \
+  --output-images data/raw_images \
+  --output-labels data/labels \
+  --count 5000
+```
+
+By default, Kaithi-to-Devanagari label mapping is loaded from
+`data/kaithi_to_devanagari.json`. You can override it:
+
+```bash
+python data/synthetic_generator.py \
+  --font-path /path/to/NotoSansKaithi-Regular.ttf \
+  --mapping-path /path/to/kaithi_to_devanagari.json \
   --output-images data/raw_images \
   --output-labels data/labels \
   --count 5000
@@ -29,7 +41,7 @@ python data/synthetic_generator.py \
 python -m training.train_trocr \
   --images-dir data/raw_images \
   --labels-dir data/labels \
-  --output-dir models/kaithi-trocr \
+  --output-dir models/kaithi_trocr \
   --epochs 10 \
   --batch-size 8 \
   --fp16
@@ -39,7 +51,7 @@ python -m training.train_trocr \
 
 ```bash
 python -m training.eval_model \
-  --model-dir models/kaithi-trocr \
+  --model-dir models/kaithi_trocr \
   --images-dir data/raw_images \
   --labels-dir data/labels
 ```
@@ -54,9 +66,9 @@ export AWS_SECRET_ACCESS_KEY=...
 export AWS_DEFAULT_REGION=us-east-1
 
 python scripts/push_model_to_s3.py \
-  --model-dir models/kaithi-trocr \
+  --model-dir models/kaithi_trocr \
   --bucket your-bucket \
-  --prefix kaithi/models/kaithi-trocr
+  --prefix kaithi/models/kaithi_trocr
 ```
 
 ## Inference API
@@ -69,6 +81,13 @@ Example curl:
 
 ```bash
 curl -X POST "http://localhost:8000/ocr" \
+  -F "file=@/path/to/kaithi_sample.png"
+```
+
+OCR with correction hint:
+
+```bash
+curl -X POST "http://localhost:8000/ocr_with_feedback?min_chars=1" \
   -F "file=@/path/to/kaithi_sample.png"
 ```
 
@@ -95,15 +114,15 @@ python -m training.retrain \
   --labels-dir data/labels \
   --images-dir data/feedback_images \
   --labels-dir data/feedback_labels \
-  --output-dir models/kaithi-trocr \
+  --output-dir models/kaithi_trocr \
   --epochs 3
 ```
 
 ## Project Layout
 
-- `data/synthetic_generator.py`: render Kaithi text images with augmentations
+- `data/synthetic_generator.py`: render Kaithi text images with Hindi labels
 - `training/dataset.py`: dataset loader returning `{"image": PIL.Image, "text": str}`
-- `training/train_trocr.py`: fine-tune TrOCR with Kaithi vocabulary
+- `training/train_trocr.py`: fine-tune TrOCR with Devanagari vocabulary
 - `training/eval_model.py`: CER evaluation and sample predictions
 - `inference/`: preprocessing, OCR inference, postprocessing
 - `api/main.py`: FastAPI endpoint

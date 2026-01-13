@@ -51,6 +51,25 @@ async def ocr_endpoint(file: UploadFile = File(...)) -> JSONResponse:
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
 
+@app.post("/ocr_with_feedback")
+async def ocr_with_feedback_endpoint(
+    file: UploadFile = File(...), min_chars: int = 1
+) -> JSONResponse:
+    """Run OCR and return a correction hint for the client."""
+    if ocr_model is None:
+        return JSONResponse(status_code=503, content={"error": "Model not loaded"})
+    image_bytes = await file.read()
+    try:
+        text = ocr_model.predict(image_bytes)
+        needs_correction = len(text) < min_chars
+        return JSONResponse(
+            content={"text": text, "needs_correction": needs_correction}
+        )
+    except Exception as exc:
+        LOGGER.exception("OCR failed")
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+
 @app.post("/feedback")
 async def feedback_endpoint(
     file: UploadFile = File(...),

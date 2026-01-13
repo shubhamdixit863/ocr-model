@@ -16,9 +16,9 @@ def iter_files(root: Path) -> Iterable[Path]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Upload model artifacts to S3.")
-    parser.add_argument("--model-dir", default="models/kaithi-trocr", help="Local model directory.")
+    parser.add_argument("--model-dir", default="models/kaithi_trocr", help="Local model directory.")
     parser.add_argument("--bucket", required=True, help="Target S3 bucket.")
-    parser.add_argument("--prefix", default="models/kaithi-trocr", help="S3 key prefix.")
+    parser.add_argument("--prefix", default="models/kaithi_trocr", help="S3 key prefix.")
     args = parser.parse_args()
 
     model_dir = Path(args.model_dir).resolve()
