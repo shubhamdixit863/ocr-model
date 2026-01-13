@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from inference.ocr import KaithiOCR
@@ -11,6 +12,13 @@ from inference.ocr import KaithiOCR
 LOGGER = logging.getLogger(__name__)
 
 app = FastAPI(title="Kaithi OCR API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 ocr_model: KaithiOCR | None = None
 DATA_DIR = Path(os.getenv("KAITHI_DATA_DIR", "data"))
 FEEDBACK_IMAGES_DIR = DATA_DIR / "feedback_images"
