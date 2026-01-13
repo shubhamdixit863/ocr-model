@@ -1,4 +1,4 @@
-models/kaithi-trocr/
+models/*
 data/raw_images/
 data/labels/
 data/feedback_images/
