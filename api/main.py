@@ -32,7 +32,7 @@ def load_model() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     FEEDBACK_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     FEEDBACK_LABELS_DIR.mkdir(parents=True, exist_ok=True)
-    ocr_model = KaithiOCR(model_dir="models/kaithi-trocr")
+    ocr_model = KaithiOCR(model_dir="models/kaithi_trocr")
 
 
 @app.post("/ocr")
