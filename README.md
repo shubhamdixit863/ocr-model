@@ -84,10 +84,10 @@ curl -X POST "http://localhost:8000/ocr" \
   -F "file=@/path/to/kaithi_sample.png"
 ```
 
-OCR with correction hint:
+OCR with correction hint (entropy-based):
 
 ```bash
-curl -X POST "http://localhost:8000/ocr_with_feedback?min_chars=1" \
+curl -X POST "http://localhost:8000/ocr_with_feedback?entropy_threshold=4.0" \
   -F "file=@/path/to/kaithi_sample.png"
 ```
 
@@ -103,6 +103,20 @@ curl -X POST "http://localhost:8000/feedback" \
 
 This stores data under `data/feedback_images/` and `data/feedback_labels/` by default.
 You can set `KAITHI_DATA_DIR` to change the base data directory.
+
+When feedback is submitted, the API triggers a background retrain if one is not
+already running:
+
+- `status: "training_started"` when a retrain is launched.
+- `status: "training_in_progress"` when a retrain is already running.
+
+Retrain behavior can be tuned via env vars:
+
+- `KAITHI_BASE_IMAGES_DIR` / `KAITHI_BASE_LABELS_DIR`
+- `KAITHI_MODEL_DIR`
+- `KAITHI_RETRAIN_EPOCHS`
+- `KAITHI_RETRAIN_BATCH_SIZE`
+- `KAITHI_RETRAIN_FP16` (`1` to enable)
 
 ## Periodic Retraining (Optional)
 

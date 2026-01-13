@@ -1,5 +1,5 @@
 torch
-transformers
+transformers[torch]
 datasets
 evaluate
 opencv-python
@@ -8,3 +8,4 @@ uvicorn
 pillow
 numpy
 boto3
+jiwer
