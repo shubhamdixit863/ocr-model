@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 from uuid import uuid4
 
+import json
+
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -51,7 +53,9 @@ async def ocr_endpoint(file: UploadFile = File(...)) -> JSONResponse:
 
 @app.post("/feedback")
 async def feedback_endpoint(
-    file: UploadFile = File(...), text: str = Form(...)
+    file: UploadFile = File(...),
+    text: str = Form(...),
+    predicted_text: str | None = Form(None),
 ) -> JSONResponse:
     """Store image and corrected text for retraining."""
     image_bytes = await file.read()
@@ -59,9 +63,14 @@ async def feedback_endpoint(
     sample_id = uuid4().hex
     image_path = FEEDBACK_IMAGES_DIR / f"{sample_id}{suffix}"
     label_path = FEEDBACK_LABELS_DIR / f"{sample_id}.txt"
+    meta_path = FEEDBACK_LABELS_DIR / f"{sample_id}.json"
     try:
         image_path.write_bytes(image_bytes)
         label_path.write_text(text, encoding="utf-8")
+        meta = {"corrected_text": text}
+        if predicted_text is not None:
+            meta["predicted_text"] = predicted_text
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         return JSONResponse(content={"id": sample_id, "status": "saved"})
     except Exception as exc:
         LOGGER.exception("Feedback save failed")
